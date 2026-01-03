@@ -124,46 +124,86 @@ async def collect_from_env(env_name: str, config: Dict, target: int) -> List[Dic
         )
         print(f"[OK] {env_name} container started")
         
+        # Wait for container to initialize
+        print(f"  Waiting for {env_name} to initialize...")
+        await asyncio.sleep(5)
+        
+        # List available methods
+        try:
+            methods = await env.methods() if hasattr(env, 'methods') else []
+            print(f"  Available methods: {methods}")
+        except Exception as e:
+            print(f"  Could not list methods: {e}")
+        
         collected = 0
         task_id = 0
         errors = 0
+        last_error = None
         
-        while collected < target and errors < 100:
+        while collected < target and errors < 100 and task_id < target + 500:
             try:
-                task = await env.get_task(task_id=task_id)
+                # Try get_task first
+                if hasattr(env, 'get_task'):
+                    task = await env.get_task(task_id=task_id)
+                elif hasattr(env, 'sample'):
+                    task = await env.sample(task_id=task_id)
+                elif hasattr(env, 'get_prompt'):
+                    task = await env.get_prompt(task_id=task_id)
+                else:
+                    # Try calling directly
+                    task = await env.call("get_task", task_id=task_id)
                 
-                if task and "prompt" in task:
-                    sample = {
-                        "prompt": task["prompt"],
-                        "environment": env_name,
-                        "task_id": task_id,
-                        "weight": 1.5 if env_name == "GAME" else 1.0,  # Higher weight for GAME
-                        "collected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    }
+                if task:
+                    # Handle different response formats
+                    prompt = None
+                    if isinstance(task, dict):
+                        prompt = task.get("prompt") or task.get("question") or task.get("input")
+                    elif isinstance(task, str):
+                        prompt = task
                     
-                    for key in ["expected", "answer", "ground_truth"]:
-                        if key in task:
-                            sample[key] = task[key]
-                    
-                    samples.append(sample)
-                    collected += 1
-                    
-                    if collected % 50 == 0:
-                        print(f"  {env_name}: {collected}/{target}")
+                    if prompt:
+                        sample = {
+                            "prompt": prompt,
+                            "environment": env_name,
+                            "task_id": task_id,
+                            "weight": 1.5 if env_name == "GAME" else 1.0,
+                            "collected_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        }
+                        
+                        if isinstance(task, dict):
+                            for key in ["expected", "answer", "ground_truth", "solution"]:
+                                if key in task:
+                                    sample[key] = task[key]
+                        
+                        samples.append(sample)
+                        collected += 1
+                        
+                        if collected % 50 == 0:
+                            print(f"  {env_name}: {collected}/{target}")
+                    else:
+                        errors += 1
+                else:
+                    errors += 1
                 
                 task_id += 1
                 if task_id % 20 == 0:
                     await asyncio.sleep(0.05)
                     
-            except Exception:
+            except Exception as e:
+                last_error = str(e)
                 errors += 1
                 task_id += 1
         
-        print(f"[OK] Collected {collected} from {env_name}")
+        if collected == 0 and last_error:
+            print(f"  Last error: {last_error[:200]}")
+        
+        print(f"[OK] Collected {collected} from {env_name} (errors: {errors})")
         await env.cleanup()
         
     except Exception as e:
         print(f"[ERROR] {env_name}: {e}")
+        import traceback
+        traceback.print_exc()
     
     return samples
 
