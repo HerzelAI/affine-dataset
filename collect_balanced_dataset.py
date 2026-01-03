@@ -61,6 +61,36 @@ def check_docker():
         return False
 
 
+def pull_images():
+    """Pull required Docker images."""
+    import subprocess
+    
+    images = [
+        "affinefoundation/game:openspiel",
+        "affinefoundation/cde:print",
+        "affinefoundation/lgc:pi-v2",
+    ]
+    
+    print("\nPulling Docker images (this may take a few minutes)...")
+    for image in images:
+        print(f"  Pulling {image}...")
+        try:
+            result = subprocess.run(
+                ["docker", "pull", image],
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+            if result.returncode == 0:
+                print(f"  [OK] {image}")
+            else:
+                print(f"  [WARN] {image}: {result.stderr[:100]}")
+        except Exception as e:
+            print(f"  [ERROR] {image}: {e}")
+    
+    print()
+
+
 def check_environment():
     """Check required environment variables."""
     if not CHUTES_API_KEY:
@@ -178,6 +208,9 @@ def main():
     
     if not check_environment() or not check_docker():
         return
+    
+    # Pull Docker images first
+    pull_images()
     
     start = time.time()
     samples = asyncio.run(collect_all())
