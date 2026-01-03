@@ -1,0 +1,22 @@
+{
+    "name": "Affine Dataset Collection",
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+    "features": {
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+        "ghcr.io/devcontainers/features/python:1": {
+            "version": "3.11"
+        }
+    },
+    "postCreateCommand": "pip install affinetes datasets huggingface_hub aiohttp",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python"
+            ]
+        }
+    },
+    "remoteEnv": {
+        "CHUTES_API_KEY": "${localEnv:CHUTES_API_KEY}",
+        "HF_TOKEN": "${localEnv:HF_TOKEN}"
+    }
+}
